@@ -1,23 +1,23 @@
 kind: ReplicationController
 apiVersion: v1beta1
-id: kube-dns
+id: kube-dns-test
 namespace: default
 labels:
-  k8s-app: kube-dns
+  k8s-app: kube-dns-test
   kubernetes.io/cluster-service: "true"
 desiredState:
   replicas: {{ pillar['dns_replicas'] }}
   replicaSelector:
-    k8s-app: kube-dns
+    k8s-app: kube-dns-test
   podTemplate:
     labels:
-      name: kube-dns
-      k8s-app: kube-dns
+      name: kube-dns-test
+      k8s-app: kube-dns-test
       kubernetes.io/cluster-service: "true"
     desiredState:
       manifest:
         version: v1beta2
-        id: kube-dns
+        id: kube-dns-test
         dnsPolicy: "Default"  # Don't use cluster DNS.
         containers:
           - name: etcd
@@ -51,6 +51,9 @@ desiredState:
               - name: dns
                 containerPort: 53
                 protocol: UDP
+            livenessProbe:
+              exec:
+                command: "sh -c \"nslookup kubernetes.default.kubernetes.local 127.0.0.1\""
         volumes:
            - name: dns-token
              source:
