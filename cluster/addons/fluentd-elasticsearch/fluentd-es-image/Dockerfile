@@ -22,7 +22,7 @@
 # Please see http://docs.fluentd.org/articles/install-by-deb for more
 # information about installing fluentd using deb package.
 
-FROM ubuntu:14.04
+FROM ubuntu:16.04
 MAINTAINER Alex Robinson "arob@google.com"
 MAINTAINER Jimmi Dyson "jimmidyson@gmail.com"
 
@@ -45,7 +45,10 @@ RUN /usr/bin/curl -L https://td-toolbelt.herokuapp.com/sh/install-ubuntu-trusty-
 # Needed to allow access to /var/log/docker/... files.
 RUN sed -i -e "s/USER=td-agent/USER=root/" -e "s/GROUP=td-agent/GROUP=root/" /etc/init.d/td-agent
 
-# Install the Elasticsearch Fluentd plug-in.
+# Install the systemd input plug-in.
+RUN td-agent-gem install fluent-plugin-kubernetes_metadata_filter fluent-plugin-elasticsearch
+
+# Install the Elasticsearch output plug-in.
 RUN td-agent-gem install fluent-plugin-kubernetes_metadata_filter fluent-plugin-elasticsearch
 
 # Copy the Fluentd configuration file.
