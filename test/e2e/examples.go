@@ -253,6 +253,57 @@ var _ = framework.KubeDescribe("[Feature:Example]", func() {
 		})
 	})
 
+	// TODO: Move this to petset.go and use the petSetTester logic?
+	framework.KubeDescribe("CockroachDB", func() {
+		It("should create and scale cockroachdb", func() {
+			mkpath := func(file string) string {
+				return filepath.Join(framework.TestContext.RepoRoot, "examples/cockroachdb", file)
+			}
+			petsetYaml := mkpath("cockroachdb-petset.yaml")
+			nsFlag := fmt.Sprintf("--namespace=%v", ns)
+
+			By("Starting the cockroachdb petset")
+			framework.RunKubectlOrDie("create", "-f", petsetyaml, nsFlag)
+			framework.Logf("wait for petset to be responsive")
+			err := framework.WaitForService(c, ns, "cockroachdb-public", true, framework.Poll, framework.ServiceRespondingTimeout)
+			Expect(err).NotTo(HaveOccurred())
+			err = framework.WaitForService(c, ns, "cockroachdb", true, framework.Poll, framework.ServiceRespondingTimeout)
+			Expect(err).NotTo(HaveOccurred())
+			for i := 0; i < 5; i++ {
+				err := framework.WaitForPodNameRunningInNamespace(c, fmt.Sprintf("cockroachdb-%d", i), ns)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			// TODO: Use this instead? Set/read some keys/values?
+			label := labels.SelectorFromSet(labels.Set(map[string]string{"app": "cockroachdb"}))
+			err = framework.WaitForPodsWithLabelRunning(c, ns, label)
+			Expect(err).NotTo(HaveOccurred())
+			forEachPod("app", "cockroachdb", func(pod api.Pod) {
+				framework.Logf("Verifying pod %v ", pod.Name)
+				_, err = framework.LookForStringInLog(ns, pod.Name, "cockroachdb", "Listening for thrift clients", serverStartTimeout)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = framework.LookForStringInLog(ns, pod.Name, "cockroachdb", "Handshaking version", serverStartTimeout)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			By("Writing a single value to the cluster and reading it from each node")
+			tableCreated := false
+			forEachPod("app", "cassandra", func(pod api.Pod) {
+				if !tableCreated {
+					output := framework.RunKubectlOrDie("exec", pod.Name, nsFlag, "--", "./cockroach", "sql", "--host", "$(hostname -f)", "-e",
+						"CREATE DATABASE IF NOT EXISTS test; CREATE TABLE IF NOT EXISTS test.test (k STRING PRIMARY KEY, v STRING); UPSERT INTO test.test VALUES ('testkey', 'testval');")
+					framework.Logf("created table: %s", output)
+					tableCreated = true
+				}
+				output := framework.RunKubectlOrDie("exec", pod.Name, nsFlag, "--", "./cockroach", "sql", "--host", "$(hostname -f)", "-e",
+					"SELECT * FROM test.test WHERE k = 'testkey';")
+				if !strings.Contains(output, "testval") {
+					framework.Failf("Failed to retrieve row from test database in pod %q: %s", pod.Name, output)
+				}
+			})
+		})
+	})
+
 	framework.KubeDescribe("Cassandra", func() {
 		It("should create and scale cassandra", func() {
 			mkpath := func(file string) string {
